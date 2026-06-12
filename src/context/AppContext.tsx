@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useEffect } from "react";
+import React, { createContext, useContext, useEffect, useRef, useState } from "react";
 import type { ReactNode } from "react";
 import { useLocalStorage } from "../hooks/useLocalStorage";
 import type { Chat, Settings } from "../types";
@@ -78,6 +78,8 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
   const [chats, setChats] = useLocalStorage<Chat[]>("Istiyak AI_chats", []);
   const [settings, setSettings] = useLocalStorage<Settings>("Istiyak AI_settings", defaultSettings);
   const [activeChatId, setActiveChatId] = useLocalStorage<string | null>("Istiyak AI_active_chat", null);
+  const [hasHydratedDbSettings, setHasHydratedDbSettings] = useState(false);
+  const lastSyncedSettingsRef = useRef<string | null>(null);
 
   // Sync with Database on mount
   useEffect(() => {
@@ -98,10 +100,12 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
               autoRouteEnabled: dbData.autoRouteEnabled ?? currentSettings.autoRouteEnabled,
               globalSystemPrompt: dbData.globalSystemPrompt || currentSettings.globalSystemPrompt,
             }));
+            setHasHydratedDbSettings(true);
           }
         }
       } catch (error) {
         console.error("Failed to load settings from DB:", error);
+        setHasHydratedDbSettings(true);
       }
     };
 
@@ -110,6 +114,39 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
       isMounted = false;
     };
   }, [setSettings]);
+
+  useEffect(() => {
+    if (!hasHydratedDbSettings) return;
+
+    const serializedSettings = JSON.stringify(settings);
+    if (lastSyncedSettingsRef.current === serializedSettings) return;
+
+    const syncTimeout = window.setTimeout(() => {
+      const syncSettingsToDb = async () => {
+        try {
+          const res = await fetch("/api/settings", {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+            },
+            body: JSON.stringify(settings),
+          });
+
+          if (res.ok) {
+            lastSyncedSettingsRef.current = serializedSettings;
+          }
+        } catch (error) {
+          console.error("Failed to auto-sync settings to DB:", error);
+        }
+      };
+
+      void syncSettingsToDb();
+    }, 500);
+
+    return () => {
+      window.clearTimeout(syncTimeout);
+    };
+  }, [hasHydratedDbSettings, settings]);
 
   return <AppContext.Provider value={{ chats, setChats, settings, setSettings, activeChatId, setActiveChatId }}>{children}</AppContext.Provider>;
 };
