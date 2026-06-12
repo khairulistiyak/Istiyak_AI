@@ -1,13 +1,13 @@
 import React, { useState } from 'react';
 import { useAppContext } from '../context/AppContext';
-import { Plus, MessageSquare, Settings as SettingsIcon, Trash2, Edit2, Check, X } from 'lucide-react';
 import { generateId } from '../utils/generateId';
 
 interface SidebarProps {
-  onOpenSettings: () => void;
+  isOpen: boolean;
+  onClose: () => void;
 }
 
-export const Sidebar: React.FC<SidebarProps> = ({ onOpenSettings }) => {
+export const Sidebar: React.FC<SidebarProps> = ({ isOpen, onClose }) => {
   const { chats, setChats, activeChatId, setActiveChatId } = useAppContext();
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editTitle, setEditTitle] = useState('');
@@ -15,13 +15,19 @@ export const Sidebar: React.FC<SidebarProps> = ({ onOpenSettings }) => {
   const handleNewChat = () => {
     const newChat = {
       id: generateId(),
-      title: 'New Chat',
+      title: 'new_session.log',
       messages: [],
       createdAt: Date.now(),
       updatedAt: Date.now(),
     };
     setChats(prev => [newChat, ...prev]);
     setActiveChatId(newChat.id);
+    if (window.innerWidth < 768) onClose();
+  };
+
+  const handleSelectChat = (id: string) => {
+    setActiveChatId(id);
+    if (window.innerWidth < 768) onClose();
   };
 
   const handleDeleteChat = (e: React.MouseEvent, id: string) => {
@@ -52,74 +58,101 @@ export const Sidebar: React.FC<SidebarProps> = ({ onOpenSettings }) => {
   };
 
   return (
-    <div className="w-64 bg-slate-900 border-r border-slate-800 flex flex-col h-full h-screen">
-      <div className="p-4">
+    <div className={`fixed md:relative z-30 w-[350px] bg-[#1c1c1e] border-r border-white/10 flex flex-col h-full flex-shrink-0 transition-transform duration-0 ${isOpen ? 'translate-x-0' : '-translate-x-full md:translate-x-0'} font-mono text-slate-300 text-[13px]`}>
+      <div className="p-4 border-b border-white/5">
+        <div className="flex justify-between items-center mb-2">
+          <span>
+            <span className="text-emerald-400 font-bold">khairulistiyak@MacBook-Pro</span>
+            <span className="text-white">:</span>
+            <span className="text-blue-400 font-bold">~/sessions</span>
+            <span className="text-white"> % </span>
+          </span>
+          <button className="md:hidden hover:text-white" onClick={onClose}>
+            [x]
+          </button>
+        </div>
         <button
           onClick={handleNewChat}
-          className="w-full flex items-center justify-center gap-2 bg-indigo-600 hover:bg-indigo-700 text-white py-2 px-4 rounded-md transition-colors"
+          className="w-full text-left hover:text-white hover:bg-white/5 px-1 py-0.5 rounded transition-colors"
         >
-          <Plus size={18} />
-          New Chat
+          touch new_session.log
         </button>
       </div>
 
-      <div className="flex-1 overflow-y-auto p-2 space-y-1">
-        {chats.map(chat => (
-          <div
-            key={chat.id}
-            onClick={() => setActiveChatId(chat.id)}
-            className={`flex items-center justify-between p-2 rounded-md cursor-pointer group transition-colors ${
-              activeChatId === chat.id ? 'bg-slate-800 text-white' : 'text-slate-400 hover:bg-slate-800 hover:text-slate-200'
-            }`}
-          >
-            {editingId === chat.id ? (
-              <form onSubmit={(e) => saveEdit(e, chat.id)} className="flex items-center gap-2 w-full" onClick={e => e.stopPropagation()}>
-                <input
-                  type="text"
-                  value={editTitle}
-                  onChange={(e) => setEditTitle(e.target.value)}
-                  className="flex-1 bg-slate-950 border border-slate-700 rounded px-2 py-0.5 text-sm text-slate-200 outline-none focus:border-indigo-500 min-w-0"
-                  autoFocus
-                />
-                <button type="submit" className="text-green-400 hover:text-green-300"><Check size={16} /></button>
-                <button type="button" onClick={cancelEdit} className="text-slate-500 hover:text-red-400"><X size={16} /></button>
-              </form>
-            ) : (
-              <>
-                <div className="flex items-center gap-2 overflow-hidden">
-                  <MessageSquare size={16} className="shrink-0" />
-                  <span className="truncate text-sm">{chat.title}</span>
-                </div>
-                <div className="opacity-0 group-hover:opacity-100 flex items-center gap-1 transition-opacity">
-                  <button
-                    onClick={(e) => startEditing(e, chat.id, chat.title)}
-                    className="text-slate-500 hover:text-indigo-400 p-0.5"
-                    title="Rename chat"
-                  >
-                    <Edit2 size={14} />
-                  </button>
-                  <button
-                    onClick={(e) => handleDeleteChat(e, chat.id)}
-                    className="text-slate-500 hover:text-red-400 p-0.5"
-                    title="Delete chat"
-                  >
-                    <Trash2 size={14} />
-                  </button>
-                </div>
-              </>
-            )}
-          </div>
-        ))}
-      </div>
+      <div className="flex-1 overflow-y-auto p-4 space-y-1 custom-scrollbar">
+        <div className="mb-2 text-slate-400">
+          <span className="text-emerald-400 font-bold">khairulistiyak@MacBook-Pro</span>
+          <span className="text-white">:</span>
+          <span className="text-blue-400 font-bold">~/sessions</span>
+          <span className="text-white"> % </span>
+          ls -la
+        </div>
+        <div className="mb-2 text-slate-400">total {chats.length * 8}</div>
+        
+        {chats.map(chat => {
+          const d = new Date(chat.updatedAt);
+          const month = d.toLocaleString('en-US', { month: 'short' });
+          const date = d.getDate().toString().padStart(2, ' ');
+          const timeStr = `${d.getHours().toString().padStart(2, '0')}:${d.getMinutes().toString().padStart(2, '0')}`;
 
-      <div className="p-4 border-t border-slate-800">
-        <button
-          onClick={onOpenSettings}
-          className="w-full flex items-center gap-2 text-slate-400 hover:text-white transition-colors p-2"
-        >
-          <SettingsIcon size={18} />
-          Settings
-        </button>
+          return (
+            <div
+              key={chat.id}
+              onClick={() => handleSelectChat(chat.id)}
+              className={`flex flex-col cursor-pointer group px-1 py-0.5 rounded transition-colors ${
+                activeChatId === chat.id ? 'bg-blue-500/20 text-white' : 'hover:bg-white/5 hover:text-white'
+              }`}
+            >
+              {editingId === chat.id ? (
+                <form onSubmit={(e) => saveEdit(e, chat.id)} className="flex items-center gap-2 w-full" onClick={e => e.stopPropagation()}>
+                  <span className="text-slate-500">-rw-r--r--</span>
+                  <span className="text-emerald-400">khairul</span>
+                  <span className="text-slate-500">staff</span>
+                  <span className="text-slate-400">{chat.messages.length * 102}</span>
+                  <span className="text-slate-400">{month} {date} {timeStr}</span>
+                  <input
+                    type="text"
+                    value={editTitle}
+                    onChange={(e) => setEditTitle(e.target.value)}
+                    className="flex-1 bg-transparent border-b border-blue-400 text-blue-300 outline-none min-w-0"
+                    autoFocus
+                  />
+                  <button type="submit" className="hover:text-emerald-400">ok</button>
+                  <button type="button" onClick={cancelEdit} className="hover:text-red-400">rm</button>
+                </form>
+              ) : (
+                <div className="flex items-center justify-between w-full">
+                  <div className="flex items-center whitespace-nowrap overflow-hidden gap-2">
+                    <span className="text-slate-500">-rw-r--r--</span>
+                    <span className="text-emerald-400 hidden sm:inline">khairul</span>
+                    <span className="text-slate-500 hidden sm:inline">staff</span>
+                    <span className="text-slate-400 hidden sm:inline">{String(chat.messages.length * 102).padStart(4, ' ')}</span>
+                    <span className="text-slate-400">{month} {date} {timeStr}</span>
+                    <span className={`truncate ${activeChatId === chat.id ? 'text-blue-300 font-bold' : ''}`}>
+                      {chat.title}
+                    </span>
+                  </div>
+                  <div className="opacity-0 group-hover:opacity-100 flex items-center gap-2 ml-2 pl-2 bg-[#1c1c1e]/80">
+                    <button
+                      onClick={(e) => startEditing(e, chat.id, chat.title)}
+                      className="hover:text-yellow-400 text-slate-400"
+                      title="Rename"
+                    >
+                      mv
+                    </button>
+                    <button
+                      onClick={(e) => handleDeleteChat(e, chat.id)}
+                      className="hover:text-red-500 text-slate-400"
+                      title="Delete"
+                    >
+                      rm
+                    </button>
+                  </div>
+                </div>
+              )}
+            </div>
+          );
+        })}
       </div>
     </div>
   );

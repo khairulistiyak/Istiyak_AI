@@ -59,25 +59,56 @@ export const aiService = {
       apiMessages.unshift({ role: "system", content: systemPrompt });
     }
 
-    const normalizedBaseUrl = provider.baseUrl.replace(/\/+$/, "").replace(/\/chat\/completions$/, "");
-    const endpoint = `${normalizedBaseUrl}/chat/completions`;
+    let normalizedBaseUrl = provider.baseUrl.replace(/\/+$/, "").replace(/\/chat\/completions$/, "");
+    let endpoint = `${normalizedBaseUrl}/chat/completions`;
 
     let response: Response;
     try {
+      // Fetch dynamic settings from MongoDB via backend API
+      let active_api_key = provider.apiKey;
+      let target_model_name = model.name;
+
+      try {
+        const dbSettingsRes = await fetch("/api/settings");
+        if (dbSettingsRes.ok) {
+          const dbSettings = await dbSettingsRes.json();
+          console.log("Fetched DB Settings in aiService:", dbSettings);
+          if (dbSettings?.active_api_key) {
+            active_api_key = dbSettings.active_api_key;
+          }
+          if (dbSettings?.model_name) {
+            target_model_name = dbSettings.model_name;
+          }
+        } else {
+          console.error("Failed to fetch DB Settings in aiService:", dbSettingsRes.statusText);
+        }
+      } catch (dbErr) {
+        console.warn("MongoDB API থেকে সেটিংস পাওয়া যায়নি। ডিফল্ট সেটিংস ব্যবহার করা হচ্ছে।", dbErr);
+      }
+
+      // Automatically adjust endpoint for Groq API keys
+      if (active_api_key && active_api_key.startsWith("gsk_")) {
+        endpoint = "https://api.groq.com/openai/v1/chat/completions";
+      }
+
+      console.log("Using API Key:", active_api_key ? "Key exists" : "Key is missing");
+
       // CORS ও Network Error এড়াতে লোকালহোস্টের জন্য ক্লিন হেডার
       const headers: Record<string, string> = {
         "Content-Type": "application/json",
       };
 
-      if (provider.apiKey) {
-        headers["Authorization"] = `Bearer ${provider.apiKey}`;
+      if (active_api_key) {
+        headers["Authorization"] = `Bearer ${active_api_key}`;
+      } else {
+        console.warn("No active_api_key found! Authorization header will be missing.");
       }
 
       response = await fetch(endpoint, {
         method: "POST",
         headers,
         body: JSON.stringify({
-          model: model.name, // UI থেকে দেওয়া মডেল আইডিটি এখানেই আসবে
+          model: target_model_name, // ডাটাবেস থেকে আসা বা ডিফল্ট মডেল নাম
           messages: apiMessages,
           stream: true,
         }),
