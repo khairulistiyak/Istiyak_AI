@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useEffect, useState, useCallback } from "react";
+import React, { createContext, useContext, useEffect, useCallback } from "react";
 import type { ReactNode } from "react";
 import { useLocalStorage } from "../hooks/useLocalStorage";
 import type { Chat, Settings } from "../types";
