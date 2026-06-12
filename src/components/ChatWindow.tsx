@@ -123,21 +123,23 @@ export const ChatWindow: React.FC<{ toggleSidebar: () => void; onOpenSettings: (
 
   if (!activeChat) {
     return (
-      <div className="flex-1 flex flex-col bg-[#1c1c1e] text-slate-300 font-mono text-[13px] relative">
-        <div className="h-8 bg-[#2d2d2d] border-b border-black flex items-center px-3 gap-2 w-full absolute top-0 left-0">
-          <div className="w-3 h-3 rounded-full bg-[#ff5f56]"></div>
-          <div className="w-3 h-3 rounded-full bg-[#ffbd2e]"></div>
-          <div className="w-3 h-3 rounded-full bg-[#27c93f]"></div>
-          <div className="flex-1 text-center font-sans font-medium text-xs text-slate-400 absolute left-0 w-full pointer-events-none">
+      <div className="flex-1 flex flex-col bg-[#1c1c1e] text-slate-300 font-mono text-sm md:text-[13px] relative">
+        <div className="h-8 bg-[#2d2d2d] border-b border-black flex items-center px-3 gap-2 w-full absolute top-0 left-0 z-10">
+          <div className="flex gap-2">
+            <div className="w-3 h-3 rounded-full bg-[#ff5f56]"></div>
+            <div className="w-3 h-3 rounded-full bg-[#ffbd2e]"></div>
+            <div className="w-3 h-3 rounded-full bg-[#27c93f]"></div>
+          </div>
+          <div className="flex-1 text-center font-sans font-medium text-xs text-slate-400 absolute left-0 w-full pointer-events-none truncate px-16">
             khairulistiyak — -zsh — 80x24
           </div>
-        </div>
-        <div className="p-4 pt-12 flex-1">
-          <div className="md:hidden mb-4">
-            <button onClick={toggleSidebar} className="text-blue-400 hover:text-blue-300">
-              [ls -la]
+          <div className="absolute right-3">
+            <button onClick={toggleSidebar} className="md:hidden text-slate-500 hover:text-white">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="3" y1="12" x2="21" y2="12"></line><line x1="3" y1="6" x2="21" y2="6"></line><line x1="3" y1="18" x2="21" y2="18"></line></svg>
             </button>
           </div>
+        </div>
+        <div className="p-4 pt-12 flex-1 overflow-y-auto">
           <div>Last login: {new Date().toString().split(" ").slice(0, 5).join(" ")} on ttys001</div>
           <br />
           <div className="animate-pulse">Awaiting connection... Select or create a session to begin.</div>
@@ -147,44 +149,31 @@ export const ChatWindow: React.FC<{ toggleSidebar: () => void; onOpenSettings: (
   }
 
   return (
-    <div className="flex-1 flex flex-col bg-[#1c1c1e] h-screen relative text-slate-300 font-mono text-[13px]">
-      <div className="h-8 bg-[#2d2d2d] border-b border-black flex items-center px-3 gap-2 shrink-0 relative">
+    <main className="flex-1 flex flex-col bg-[#1c1c1e] h-screen relative text-slate-300 font-mono text-sm md:text-[13px]">
+      <header className="h-8 bg-[#2d2d2d] border-b border-black flex items-center px-3 gap-2 shrink-0 relative z-10">
         <div className="flex gap-2 relative z-10">
           <div className="w-3 h-3 rounded-full bg-[#ff5f56] shadow-[0_0_2px_rgba(0,0,0,0.5)]"></div>
           <div className="w-3 h-3 rounded-full bg-[#ffbd2e] shadow-[0_0_2px_rgba(0,0,0,0.5)]"></div>
           <div className="w-3 h-3 rounded-full bg-[#27c93f] shadow-[0_0_2px_rgba(0,0,0,0.5)]"></div>
         </div>
         <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
-          <div className="font-sans font-medium text-xs text-slate-400 flex items-center gap-2">
+          <div className="font-sans font-medium text-xs text-slate-400 flex items-center gap-2 truncate px-16">
             <span>khairulistiyak — -zsh</span>
           </div>
         </div>
         <div className="absolute right-3">
           <button onClick={toggleSidebar} className="md:hidden text-slate-500 hover:text-white">
-            <svg
-              width="16"
-              height="16"
-              viewBox="0 0 24 24"
-              fill="none"
-              stroke="currentColor"
-              strokeWidth="2"
-              strokeLinecap="round"
-              strokeLinejoin="round"
-            >
-              <line x1="3" y1="12" x2="21" y2="12"></line>
-              <line x1="3" y1="6" x2="21" y2="6"></line>
-              <line x1="3" y1="18" x2="21" y2="18"></line>
-            </svg>
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="3" y1="12" x2="21" y2="12"></line><line x1="3" y1="6" x2="21" y2="6"></line><line x1="3" y1="18" x2="21" y2="18"></line></svg>
           </button>
         </div>
-      </div>
+      </header>
 
-      <div className="flex-1 overflow-y-auto p-4 custom-scrollbar">
+      <div className="flex-1 overflow-y-auto p-2 sm:p-4 custom-scrollbar">
         {activeChat.messages.length === 0 && !error ? (
-          <div>
+          <div className="break-words">
             <div>Last login: {new Date().toString().split(" ").slice(0, 5).join(" ")} on ttys001</div>
             <br />
-            <div>
+            <div className="break-all">
               <span className="text-emerald-400 font-bold">khairulistiyak@MacBook-Pro</span>
               <span className="text-white">:</span>
               <span className="text-blue-400 font-bold">~</span>
@@ -198,7 +187,7 @@ export const ChatWindow: React.FC<{ toggleSidebar: () => void; onOpenSettings: (
           </div>
         ) : (
           <div className="w-full pb-8">
-            <div>Last login: {new Date().toString().split(" ").slice(0, 5).join(" ")} on ttys001</div>
+            <div className="break-words">Last login: {new Date().toString().split(" ").slice(0, 5).join(" ")} on ttys001</div>
             <br />
             {activeChat.messages.map((msg) => (
               <MessageBubble key={msg.id} message={msg} />
@@ -215,8 +204,9 @@ export const ChatWindow: React.FC<{ toggleSidebar: () => void; onOpenSettings: (
 
         {/* Terminal Input Line */}
         <div className="mt-4 flex items-start">
-          <div className="mr-2 pt-1 font-bold whitespace-nowrap">
-            <span className="text-emerald-400 font-bold">khairulistiyak@MacBook-Pro</span>
+          <div className="mr-2 pt-1 font-bold whitespace-nowrap break-all">
+            <span className="text-emerald-400 font-bold hidden sm:inline">khairulistiyak@MacBook-Pro</span>
+            <span className="text-emerald-400 font-bold sm:hidden">istiyak</span>
             <span className="text-white">:</span>
             <span className="text-blue-400 font-bold">~</span>
             <span className="text-white"> % </span>
@@ -230,10 +220,10 @@ export const ChatWindow: React.FC<{ toggleSidebar: () => void; onOpenSettings: (
             rows={1}
             autoFocus
             disabled={isStreaming}
-            placeholder={isStreaming ? "Waiting for response..." : "Type a command or question..."}
+            placeholder={isStreaming ? "Waiting for response..." : "Type a command..."}
           />
         </div>
       </div>
-    </div>
+    </main>
   );
 };
