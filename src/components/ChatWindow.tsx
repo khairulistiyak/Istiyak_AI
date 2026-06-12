@@ -8,6 +8,7 @@ export const ChatWindow: React.FC<{ toggleSidebar: () => void; onOpenSettings: (
   const { chats, setChats, activeChatId, settings } = useAppContext();
   const [input, setInput] = useState("");
   const [isStreaming, setIsStreaming] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
@@ -30,13 +31,14 @@ export const ChatWindow: React.FC<{ toggleSidebar: () => void; onOpenSettings: (
     const command = input.trim();
     if (!command || isStreaming || !activeChatId) return;
 
+    setError(null); // Clear previous errors
+
     if (command.toLowerCase() === "open settings" || command.toLowerCase() === "config" || command.toLowerCase() === "settings") {
       setInput("");
       onOpenSettings();
       return;
     }
 
-    // eslint-disable-next-line react-hooks/purity
     const ts = Date.now();
     const userMessage = {
       id: generateId(),
@@ -49,40 +51,14 @@ export const ChatWindow: React.FC<{ toggleSidebar: () => void; onOpenSettings: (
 
     setChats((prev) => prev.map((c) => (c.id === activeChatId ? { ...c, messages: newMessages, updatedAt: ts } : c)));
     setIsStreaming(true);
+    setInput("");
 
     try {
-      let route;
-      if (settings.autoRouteEnabled) {
-        route = aiService.autoRoute(userMessage.content, settings);
-      } else {
-        const manualModelId = settings.models.length > 0 ? settings.models[0].id : null;
-        const selectedModel = settings.models.find((m) => m.id === manualModelId);
-        const selectedProvider = settings.providers.find((p) => p.id === selectedModel?.providerId);
-        if (selectedModel && selectedProvider) {
-          route = { model: selectedModel, provider: selectedProvider };
-        } else {
-          route = aiService.autoRoute(userMessage.content, settings); // fallback
-        }
-      }
+      const route = aiService.autoRoute(userMessage.content, settings);
 
       if (!route) {
-        setChats((prev) =>
-          prev.map((c) =>
-            c.id === activeChatId
-              ? {
-                  ...c,
-                  messages: c.messages.slice(0, -1),
-                  updatedAt: Date.now(),
-                }
-              : c,
-          ),
-        );
-        setIsStreaming(false);
-        onOpenSettings();
-        return;
+        throw new Error("No valid model or provider configured. Please check your settings.");
       }
-
-      setInput("");
 
       const assistantMessageId = generateId();
       setChats((prev) =>
@@ -119,15 +95,20 @@ export const ChatWindow: React.FC<{ toggleSidebar: () => void; onOpenSettings: (
     } catch (error) {
       console.error(error);
       const errorObj = error as Error;
-      // eslint-disable-next-line react-hooks/purity
-      const ts = Date.now();
-      const errorMessage = {
-        id: generateId(),
-        role: "assistant" as const,
-        content: `**zsh: command not found or connection refused:** ${errorObj.message || 'Unknown error'}`,
-        timestamp: ts,
-      };
-      setChats((prev) => prev.map((c) => (c.id === activeChatId ? { ...c, messages: [...c.messages, errorMessage] } : c)));
+      const errorMessageContent = `**Error:** ${errorObj.message || 'An unknown error occurred.'}`;
+      setError(errorMessageContent); // Set error state to display in the UI
+
+      // Remove the optimistic user message and the empty assistant bubble
+      setChats((prev) =>
+        prev.map((c) =>
+          c.id === activeChatId
+            ? {
+                ...c,
+                messages: c.messages.slice(0, c.messages.length - 2),
+              }
+            : c,
+        ),
+      );
     } finally {
       setIsStreaming(false);
     }
@@ -199,7 +180,7 @@ export const ChatWindow: React.FC<{ toggleSidebar: () => void; onOpenSettings: (
       </div>
 
       <div className="flex-1 overflow-y-auto p-4 custom-scrollbar">
-        {activeChat.messages.length === 0 ? (
+        {activeChat.messages.length === 0 && !error ? (
           <div>
             <div>Last login: {new Date().toString().split(" ").slice(0, 5).join(" ")} on ttys001</div>
             <br />
@@ -225,6 +206,12 @@ export const ChatWindow: React.FC<{ toggleSidebar: () => void; onOpenSettings: (
             <div ref={messagesEndRef} />
           </div>
         )}
+        
+        {error && (
+            <div className="mt-4 text-red-400">
+                <p dangerouslySetInnerHTML={{ __html: error.replace(/\n/g, "<br />") }} />
+            </div>
+        )}
 
         {/* Terminal Input Line */}
         <div className="mt-4 flex items-start">
@@ -243,6 +230,7 @@ export const ChatWindow: React.FC<{ toggleSidebar: () => void; onOpenSettings: (
             rows={1}
             autoFocus
             disabled={isStreaming}
+            placeholder={isStreaming ? "Waiting for response..." : "Type a command or question..."}
           />
         </div>
       </div>

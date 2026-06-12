@@ -1,5 +1,5 @@
-import { useState } from 'react';
-import { Routes, Route } from 'react-router-dom';
+import { useState, useEffect } from 'react';
+import { Routes, Route, useLocation, useNavigate } from 'react-router-dom';
 import { AppProvider } from './context/AppContext';
 import { Sidebar } from './components/Sidebar';
 import { ChatWindow } from './components/ChatWindow';
@@ -9,6 +9,24 @@ import { AdminDashboard } from './components/AdminDashboard';
 const AppContent = () => {
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
+  const location = useLocation();
+  const navigate = useNavigate();
+
+  useEffect(() => {
+    if (location.pathname === '/settings') {
+      setIsSettingsOpen(true);
+    } else {
+      setIsSettingsOpen(false);
+    }
+  }, [location.pathname]);
+
+  const handleOpenSettings = () => {
+    navigate('/settings');
+  };
+
+  const handleCloseSettings = () => {
+    navigate('/');
+  };
 
   return (
     <div className="flex h-screen bg-[#1c1c1e] text-slate-300 overflow-hidden font-mono relative selection:bg-blue-500/30 selection:text-blue-100">
@@ -24,9 +42,9 @@ const AppContent = () => {
       />
       <ChatWindow 
         toggleSidebar={() => setIsSidebarOpen(prev => !prev)} 
-        onOpenSettings={() => setIsSettingsOpen(true)} 
+        onOpenSettings={handleOpenSettings} 
       />
-      {isSettingsOpen && <SettingsModal onClose={() => setIsSettingsOpen(false)} />}
+      {isSettingsOpen && <SettingsModal onClose={handleCloseSettings} />}
     </div>
   );
 };
@@ -35,7 +53,7 @@ function App() {
   return (
     <AppProvider>
       <Routes>
-        <Route path="/" element={<AppContent />} />
+        <Route path="/*" element={<AppContent />} />
         <Route path="/admin" element={<AdminDashboard />} />
       </Routes>
     </AppProvider>

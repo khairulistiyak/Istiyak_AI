@@ -77,7 +77,11 @@ app.get('/api/settings', async (req, res) => {
       await settings.save();
     }
 
-    res.json(settings);
+    // IMPORTANT: Do not send API keys to the client
+    const clientSafeSettings = JSON.parse(JSON.stringify(settings));
+    clientSafeSettings.providers.forEach(p => p.apiKey = ''); // Redact API key
+
+    res.json(clientSafeSettings);
   } catch (error) {
     console.error('Error fetching settings:', error);
     res.status(500).json({ error: 'Internal Server Error' });
@@ -91,14 +95,26 @@ app.post('/api/settings', async (req, res) => {
     let settings = await UserSettings.findOne();
 
     if (settings) {
+      // To prevent overwriting stored API keys with empty ones from the client
+      if (data.providers) {
+        data.providers.forEach(newProvider => {
+          const existingProvider = settings.providers.find(p => p.id === newProvider.id);
+          if (existingProvider && !newProvider.apiKey) {
+            newProvider.apiKey = existingProvider.apiKey;
+          }
+        });
+      }
       Object.assign(settings, data);
       await settings.save();
     } else {
       settings = new UserSettings(data);
       await settings.save();
     }
+    
+    const clientSafeSettings = JSON.parse(JSON.stringify(settings));
+    clientSafeSettings.providers.forEach(p => p.apiKey = '');
 
-    res.json({ message: 'Settings saved successfully', settings });
+    res.json({ message: 'Settings saved successfully', settings: clientSafeSettings });
   } catch (error) {
     console.error('Error saving settings:', error);
     res.status(500).json({ error: 'Internal Server Error' });
@@ -173,6 +189,95 @@ app.patch('/api/journals/:id', async (req, res) => {
     res.json(journal);
   } catch (error) {
     res.status(500).json({ error: 'Failed to update journal' });
+  }
+});
+
+// Secure Chat Proxy Route
+app.post('/api/chat', async (req, res) => {
+  try {
+    const { messages, route, systemPrompt } = req.body;
+
+    if (!messages || !route || !route.model || !route.provider) {
+      return res.status(400).json({ error: 'Missing messages or route information' });
+    }
+
+    const { model, provider } = route;
+
+    const settings = await UserSettings.findOne();
+    if (!settings) {
+      return res.status(500).json({ error: 'Settings not configured on the server.' });
+    }
+
+    const serverProvider = settings.providers.find(p => p.id === provider.id);
+    const serverModel = settings.models.find(m => m.id === model.id);
+
+    if (!serverProvider || !serverModel) {
+      return res.status(404).json({ error: 'Provider or model not found on server.' });
+    }
+
+    const apiKey = serverProvider.apiKey;
+    const modelName = serverModel.name;
+    const baseUrl = serverProvider.baseUrl;
+
+    if (!apiKey) {
+      console.error("API Key is missing for provider:", serverProvider.name);
+      return res.status(500).json({ error: 'API key not configured for the selected provider.' });
+    }
+
+    const normalizedBaseUrl = baseUrl.replace(/\/+$/, "").replace(/\/chat\/completions$/, "");
+    let endpoint = `${normalizedBaseUrl}/chat/completions`;
+
+    if (apiKey.startsWith("gsk_")) {
+      endpoint = "https://api.groq.com/openai/v1/chat/completions";
+    }
+
+    const apiMessages = messages.map(m => ({
+      role: m.role,
+      content: m.content,
+    }));
+
+    if (systemPrompt) {
+      apiMessages.unshift({ role: "system", content: systemPrompt });
+    }
+
+    const externalApiResponse = await fetch(endpoint, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "Authorization": `Bearer ${apiKey}`,
+      },
+      body: JSON.stringify({
+        model: modelName,
+        messages: apiMessages,
+        stream: true,
+      }),
+    });
+
+    if (!externalApiResponse.ok) {
+      const errorBody = await externalApiResponse.text();
+      console.error(`External API Error (${externalApiResponse.status}):`, errorBody);
+      return res.status(externalApiResponse.status).json({ 
+        error: `API call failed with status ${externalApiResponse.status}`,
+        details: errorBody
+      });
+    }
+
+    res.setHeader('Content-Type', 'text/event-stream; charset=utf-8');
+    res.setHeader('Cache-Control', 'no-cache');
+    res.setHeader('Connection', 'keep-alive');
+    
+    for await (const chunk of externalApiResponse.body) {
+      res.write(chunk);
+    }
+    
+    res.end();
+
+  } catch (error) {
+    console.error('Error in /api/chat proxy:', error);
+    if (error.cause && error.cause.code) {
+        return res.status(502).json({ error: 'Bad Gateway: Could not connect to the AI service.', details: error.message });
+    }
+    res.status(500).json({ error: 'Internal Server Error on the proxy.' });
   }
 });
 

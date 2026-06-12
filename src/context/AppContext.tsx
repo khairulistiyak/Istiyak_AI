@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useEffect, useRef, useState } from "react";
+import React, { createContext, useContext, useEffect, useState, useCallback } from "react";
 import type { ReactNode } from "react";
 import { useLocalStorage } from "../hooks/useLocalStorage";
 import type { Chat, Settings } from "../types";
@@ -10,6 +10,7 @@ interface AppContextType {
   setSettings: React.Dispatch<React.SetStateAction<Settings>>;
   activeChatId: string | null;
   setActiveChatId: (id: string | null) => void;
+  fetchSettings: () => Promise<void>;
 }
 
 const AppContext = createContext<AppContextType | undefined>(undefined);
@@ -26,129 +27,42 @@ const defaultSettings: Settings = {
   globalSystemPrompt: "You are a helpful AI assistant.",
 };
 
-const createLegacyFallbackSettings = (dbData: {
-  providers?: Settings["providers"];
-  models?: Settings["models"];
-  routingRules?: Settings["routingRules"];
-  autoRouteEnabled?: boolean;
-  globalSystemPrompt?: string;
-  active_api_key?: string;
-  model_name?: string;
-}) => {
-  const hasProviders = Array.isArray(dbData.providers) && dbData.providers.length > 0;
-  const hasModels = Array.isArray(dbData.models) && dbData.models.length > 0;
-
-  if (hasProviders || hasModels) {
-    return {
-      providers: dbData.providers || [],
-      models: dbData.models || [],
-    };
-  }
-
-  if (!dbData.active_api_key || !dbData.model_name) {
-    return {
-      providers: [],
-      models: [],
-    };
-  }
-
-  const providerId = "legacy-db-provider";
-  const modelId = "legacy-db-model";
-
-  return {
-    providers: [
-      {
-        id: providerId,
-        name: "Legacy DB Provider",
-        baseUrl: "https://api.openai.com/v1",
-        apiKey: dbData.active_api_key,
-      },
-    ],
-    models: [
-      {
-        id: modelId,
-        name: dbData.model_name,
-        providerId,
-      },
-    ],
-  };
-};
-
 export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
   const [chats, setChats] = useLocalStorage<Chat[]>("Istiyak AI_chats", []);
   const [settings, setSettings] = useLocalStorage<Settings>("Istiyak AI_settings", defaultSettings);
   const [activeChatId, setActiveChatId] = useLocalStorage<string | null>("Istiyak AI_active_chat", null);
-  const [hasHydratedDbSettings, setHasHydratedDbSettings] = useState(false);
-  const lastSyncedSettingsRef = useRef<string | null>(null);
 
-  // Sync with Database on mount
-  useEffect(() => {
-    let isMounted = true;
-
-    const fetchDbSettings = async () => {
-      try {
-        const res = await fetch("/api/settings");
-        if (res.ok) {
-          const dbData = await res.json();
-          if (dbData && isMounted) {
-            const legacyFallback = createLegacyFallbackSettings(dbData);
-            setSettings((currentSettings) => ({
-              ...currentSettings,
-              providers: legacyFallback.providers.length > 0 ? legacyFallback.providers : currentSettings.providers,
-              models: legacyFallback.models.length > 0 ? legacyFallback.models : currentSettings.models,
-              routingRules: dbData.routingRules || currentSettings.routingRules,
-              autoRouteEnabled: dbData.autoRouteEnabled ?? currentSettings.autoRouteEnabled,
-              globalSystemPrompt: dbData.globalSystemPrompt || currentSettings.globalSystemPrompt,
-            }));
-            setHasHydratedDbSettings(true);
-          }
+  const fetchSettings = useCallback(async () => {
+    try {
+      const res = await fetch("/api/settings");
+      if (res.ok) {
+        const dbData = await res.json();
+        if (dbData) {
+          // Overwrite local settings with server-side settings
+          setSettings({
+            providers: dbData.providers || [],
+            models: dbData.models || [],
+            routingRules: dbData.routingRules || defaultSettings.routingRules,
+            autoRouteEnabled: dbData.autoRouteEnabled ?? defaultSettings.autoRouteEnabled,
+            globalSystemPrompt: dbData.globalSystemPrompt || defaultSettings.globalSystemPrompt,
+          });
         }
-      } catch (error) {
-        console.error("Failed to load settings from DB:", error);
-        setHasHydratedDbSettings(true);
       }
-    };
-
-    fetchDbSettings();
-    return () => {
-      isMounted = false;
-    };
+    } catch (error) {
+      console.error("Failed to load settings from DB:", error);
+    }
   }, [setSettings]);
 
+  // Fetch settings from the database when the app first loads
   useEffect(() => {
-    if (!hasHydratedDbSettings) return;
+    void fetchSettings();
+  }, [fetchSettings]);
 
-    const serializedSettings = JSON.stringify(settings);
-    if (lastSyncedSettingsRef.current === serializedSettings) return;
-
-    const syncTimeout = window.setTimeout(() => {
-      const syncSettingsToDb = async () => {
-        try {
-          const res = await fetch("/api/settings", {
-            method: "POST",
-            headers: {
-              "Content-Type": "application/json",
-            },
-            body: JSON.stringify(settings),
-          });
-
-          if (res.ok) {
-            lastSyncedSettingsRef.current = serializedSettings;
-          }
-        } catch (error) {
-          console.error("Failed to auto-sync settings to DB:", error);
-        }
-      };
-
-      void syncSettingsToDb();
-    }, 500);
-
-    return () => {
-      window.clearTimeout(syncTimeout);
-    };
-  }, [hasHydratedDbSettings, settings]);
-
-  return <AppContext.Provider value={{ chats, setChats, settings, setSettings, activeChatId, setActiveChatId }}>{children}</AppContext.Provider>;
+  return (
+    <AppContext.Provider value={{ chats, setChats, settings, setSettings, activeChatId, setActiveChatId, fetchSettings }}>
+      {children}
+    </AppContext.Provider>
+  );
 };
 
 // eslint-disable-next-line react-refresh/only-export-components

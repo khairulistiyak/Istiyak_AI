@@ -73,77 +73,46 @@ export const aiService = {
   },
 
   /**
-   * Fetch stream response from OpenAI compatible endpoints
+   * Fetch stream response from secure backend proxy
    */
   async *streamChat(messages: Message[], route: RouteResult, systemPrompt?: string): AsyncGenerator<string, void, unknown> {
-    const { model, provider } = route;
-
-    const apiMessages = messages.map((m) => ({
-      role: m.role,
-      content: m.content,
-    }));
-
-    if (systemPrompt) {
-      apiMessages.unshift({ role: "system", content: systemPrompt });
-    }
-
-    const normalizedBaseUrl = provider.baseUrl.replace(/\/+$/, "").replace(/\/chat\/completions$/, "");
-    let endpoint = `${normalizedBaseUrl}/chat/completions`;
-
     let response: Response;
     try {
-      const active_api_key = provider.apiKey;
-      const target_model_name = model.name;
-
-      // Automatically adjust endpoint for Groq API keys
-      if (active_api_key && active_api_key.startsWith("gsk_")) {
-        endpoint = "https://api.groq.com/openai/v1/chat/completions";
-      }
-
-      console.log("Using API Key:", active_api_key ? "Key exists" : "Key is missing");
-
-      // CORS ও Network Error এড়াতে লোকালহোস্টের জন্য ক্লিন হেডার
-      const headers: Record<string, string> = {
-        "Content-Type": "application/json",
-      };
-
-      if (active_api_key) {
-        headers["Authorization"] = `Bearer ${active_api_key}`;
-      } else {
-        console.warn("No active_api_key found! Authorization header will be missing.");
-      }
-
-      response = await fetch(endpoint, {
+      // call our backend proxy instead of the external API directly
+      response = await fetch('/api/chat', {
         method: "POST",
-        headers,
+        headers: {
+          "Content-Type": "application/json",
+        },
         body: JSON.stringify({
-          model: target_model_name,
-          messages: apiMessages,
-          stream: true,
+          messages,
+          route,
+          systemPrompt
         }),
       });
     } catch (error) {
-      const errObj = error as Error;
-      if (errObj.name === "TypeError" && errObj.message.includes("Failed to fetch")) {
-        throw new Error(
-          `Network Error: Connection closed or failed to reach API. 
-         \n\n**Hints:**
-         1. If using Local AI (like Ollama): Ensure the app is running and the Base URL is correct (e.g., http://localhost:11434/v1).
-         2. If using Cloud API: Your antivirus, VPN, or adblocker might be blocking the connection, or the Base URL is invalid.`,
-          { cause: error },
-        );
-      }
-      throw error;
+      throw new Error(
+        `Network Error: Failed to connect to the backend server. Please check your internet connection or ensure the server is running.`,
+        { cause: error },
+      );
     }
 
     if (!response.ok) {
       let errorMsg = `API Error: ${response.status} ${response.statusText}`;
       try {
         const errorBody = await response.json();
-        if (errorBody?.error?.message) {
-          errorMsg += ` - ${errorBody.error.message}`;
-        } else if (typeof errorBody === "string") {
-          errorMsg += ` - ${errorBody}`;
+        if (errorBody?.error) {
+          errorMsg += ` - ${errorBody.error}`;
+        }
+        if (errorBody?.details) {
+            try {
+                const detailsJson = JSON.parse(errorBody.details);
+                if (detailsJson.error && detailsJson.error.message) {
+                    errorMsg += ` (${detailsJson.error.message})`;
+                }
+            } catch(e) {
+                errorMsg += ` (${errorBody.details})`;
+            }
         }
       // eslint-disable-next-line @typescript-eslint/no-unused-vars
       } catch (e) {
