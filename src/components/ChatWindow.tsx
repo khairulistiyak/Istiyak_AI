@@ -36,17 +36,18 @@ export const ChatWindow: React.FC<{ toggleSidebar: () => void; onOpenSettings: (
       return;
     }
 
+    // eslint-disable-next-line react-hooks/purity
+    const ts = Date.now();
     const userMessage = {
       id: generateId(),
       role: "user" as const,
       content: command,
-      timestamp: Date.now(),
+      timestamp: ts,
     };
 
     const newMessages = [...(activeChat?.messages || []), userMessage];
 
-    setChats((prev) => prev.map((c) => (c.id === activeChatId ? { ...c, messages: newMessages, updatedAt: Date.now() } : c)));
-    setInput("");
+    setChats((prev) => prev.map((c) => (c.id === activeChatId ? { ...c, messages: newMessages, updatedAt: ts } : c)));
     setIsStreaming(true);
 
     try {
@@ -65,8 +66,23 @@ export const ChatWindow: React.FC<{ toggleSidebar: () => void; onOpenSettings: (
       }
 
       if (!route) {
-        throw new Error("No available model/provider configured.");
+        setChats((prev) =>
+          prev.map((c) =>
+            c.id === activeChatId
+              ? {
+                  ...c,
+                  messages: c.messages.slice(0, -1),
+                  updatedAt: Date.now(),
+                }
+              : c,
+          ),
+        );
+        setIsStreaming(false);
+        onOpenSettings();
+        return;
       }
+
+      setInput("");
 
       const assistantMessageId = generateId();
       setChats((prev) =>
@@ -80,7 +96,11 @@ export const ChatWindow: React.FC<{ toggleSidebar: () => void; onOpenSettings: (
         ),
       );
 
-      const stream = aiService.streamChat(newMessages, route, activeChat?.systemPrompt || settings.globalSystemPrompt);
+      const context = await aiService.getRelevantContext(userMessage.content);
+      const baseSystemPrompt = activeChat?.systemPrompt || settings.globalSystemPrompt;
+      const finalSystemPrompt = context ? `${baseSystemPrompt}\n${context}` : baseSystemPrompt;
+
+      const stream = aiService.streamChat(newMessages, route, finalSystemPrompt);
 
       let fullContent = "";
       for await (const chunk of stream) {
@@ -96,13 +116,16 @@ export const ChatWindow: React.FC<{ toggleSidebar: () => void; onOpenSettings: (
           ),
         );
       }
-    } catch (error: any) {
+    } catch (error) {
       console.error(error);
+      const errorObj = error as Error;
+      // eslint-disable-next-line react-hooks/purity
+      const ts = Date.now();
       const errorMessage = {
         id: generateId(),
         role: "assistant" as const,
-        content: `**zsh: command not found or connection refused:** ${error.message}`,
-        timestamp: Date.now(),
+        content: `**zsh: command not found or connection refused:** ${errorObj.message || 'Unknown error'}`,
+        timestamp: ts,
       };
       setChats((prev) => prev.map((c) => (c.id === activeChatId ? { ...c, messages: [...c.messages, errorMessage] } : c)));
     } finally {

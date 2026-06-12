@@ -45,6 +45,34 @@ export const aiService = {
   },
 
   /**
+   * Fetch relevant context from active journals (RAG Ready Architecture)
+   * This is currently a basic implementation but designed modularly 
+   * to easily plug in MongoDB Vector Search or LangChain in the future.
+   */
+  async getRelevantContext(query: string): Promise<string> {
+    try {
+      // Fetch only active journals. Later, this endpoint can be updated
+      // to perform true semantic vector search on the backend.
+      const response = await fetch(`/api/journals/search?q=${encodeURIComponent(query)}`);
+      if (!response.ok) return '';
+      
+      const journals = await response.json();
+      if (!journals || journals.length === 0) return '';
+
+      // Format the context for the LLM
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const contextStr = journals.map((j: any) => {
+        return `[Context Note - Tags: ${j.tags?.join(', ') || 'None'}]\n${j.content}`;
+      }).join('\n\n---\n\n');
+
+      return `\n\n=== RELEVANT CONTEXT (Use this to inform your answer if helpful) ===\n${contextStr}\n======================\n`;
+    } catch (error) {
+      console.error('Failed to fetch relevant context:', error);
+      return '';
+    }
+  },
+
+  /**
    * Fetch stream response from OpenAI compatible endpoints
    */
   async *streamChat(messages: Message[], route: RouteResult, systemPrompt?: string): AsyncGenerator<string, void, unknown> {
@@ -59,32 +87,13 @@ export const aiService = {
       apiMessages.unshift({ role: "system", content: systemPrompt });
     }
 
-    let normalizedBaseUrl = provider.baseUrl.replace(/\/+$/, "").replace(/\/chat\/completions$/, "");
+    const normalizedBaseUrl = provider.baseUrl.replace(/\/+$/, "").replace(/\/chat\/completions$/, "");
     let endpoint = `${normalizedBaseUrl}/chat/completions`;
 
     let response: Response;
     try {
-      // Fetch dynamic settings from MongoDB via backend API
-      let active_api_key = provider.apiKey;
-      let target_model_name = model.name;
-
-      try {
-        const dbSettingsRes = await fetch("/api/settings");
-        if (dbSettingsRes.ok) {
-          const dbSettings = await dbSettingsRes.json();
-          console.log("Fetched DB Settings in aiService:", dbSettings);
-          if (dbSettings?.active_api_key) {
-            active_api_key = dbSettings.active_api_key;
-          }
-          if (dbSettings?.model_name) {
-            target_model_name = dbSettings.model_name;
-          }
-        } else {
-          console.error("Failed to fetch DB Settings in aiService:", dbSettingsRes.statusText);
-        }
-      } catch (dbErr) {
-        console.warn("MongoDB API থেকে সেটিংস পাওয়া যায়নি। ডিফল্ট সেটিংস ব্যবহার করা হচ্ছে।", dbErr);
-      }
+      const active_api_key = provider.apiKey;
+      const target_model_name = model.name;
 
       // Automatically adjust endpoint for Groq API keys
       if (active_api_key && active_api_key.startsWith("gsk_")) {
@@ -108,13 +117,14 @@ export const aiService = {
         method: "POST",
         headers,
         body: JSON.stringify({
-          model: target_model_name, // ডাটাবেস থেকে আসা বা ডিফল্ট মডেল নাম
+          model: target_model_name,
           messages: apiMessages,
           stream: true,
         }),
       });
-    } catch (error: any) {
-      if (error.name === "TypeError" && error.message.includes("Failed to fetch")) {
+    } catch (error) {
+      const errObj = error as Error;
+      if (errObj.name === "TypeError" && errObj.message.includes("Failed to fetch")) {
         throw new Error(
           `Network Error: Connection closed or failed to reach API. 
          \n\n**Hints:**
@@ -135,6 +145,7 @@ export const aiService = {
         } else if (typeof errorBody === "string") {
           errorMsg += ` - ${errorBody}`;
         }
+      // eslint-disable-next-line @typescript-eslint/no-unused-vars
       } catch (e) {
         // Fallback to basic error if JSON parsing fails
       }

@@ -11,6 +11,7 @@ interface SettingsModalProps {
 export const SettingsModal: React.FC<SettingsModalProps> = ({ onClose }) => {
   const { settings, setSettings } = useAppContext();
   const [activeTab, setActiveTab] = useState<'providers' | 'database'>('providers');
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const [dbData, setDbData] = useState<any>(null);
 
   // Auto-clear Form States
@@ -32,13 +33,6 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ onClose }) => {
   // Delete Confirmation Modal State
   const [itemToDelete, setItemToDelete] = useState<{ type: 'provider' | 'model', id: string, name: string } | null>(null);
 
-  // Fetch DB data when database tab is active
-  useEffect(() => {
-    if (activeTab === 'database') {
-      fetchDbData();
-    }
-  }, [activeTab]);
-
   const fetchDbData = () => {
     setDbData(null);
     fetch("/api/settings")
@@ -48,6 +42,14 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ onClose }) => {
       })
       .catch(err => console.error("Error fetching db data:", err));
   };
+
+  // Fetch DB data when database tab is active
+  useEffect(() => {
+    if (activeTab === 'database') {
+      // eslint-disable-next-line react-hooks/set-state-in-effect
+      fetchDbData();
+    }
+  }, [activeTab]);
 
   const addProvider = () => {
     if (!newProviderName || !newProviderBaseUrl || !newProviderApiKey) {
@@ -119,11 +121,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ onClose }) => {
 
   const saveSettingsToDB = async () => {
     try {
-      // Find the first provider and model to save to DB
-      const provider = settings.providers[0];
-      const model = settings.models[0];
-
-      if (!provider || !model) {
+      if (settings.providers.length === 0 || settings.models.length === 0) {
         alert("Please ensure you have at least one provider and one model added.");
         return;
       }
@@ -133,10 +131,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ onClose }) => {
         headers: {
           "Content-Type": "application/json",
         },
-        body: JSON.stringify({
-          active_api_key: provider.apiKey,
-          model_name: model.name,
-        }),
+        body: JSON.stringify(settings),
       });
 
       if (res.ok) {
@@ -161,6 +156,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ onClose }) => {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
+          ...settings,
           active_api_key: dbFormApiKey,
           model_name: dbFormModelName,
         }),
@@ -178,6 +174,35 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ onClose }) => {
     } catch (error) {
       console.error("Error updating db settings:", error);
       alert("Error updating MongoDB. Is the backend server running?");
+    }
+  };
+
+  const clearAllData = async () => {
+    const confirmed = window.confirm(
+      'This will clear all journals and saved settings from MongoDB, plus the local chat cache. Continue?',
+    );
+
+    if (!confirmed) return;
+
+    try {
+      const [journalsRes, settingsRes] = await Promise.all([
+        fetch('/api/journals', { method: 'DELETE' }),
+        fetch('/api/settings', { method: 'DELETE' }),
+      ]);
+
+      if (!journalsRes.ok || !settingsRes.ok) {
+        throw new Error('Failed to clear one or more database collections.');
+      }
+
+      window.localStorage.removeItem('Istiyak AI_chats');
+      window.localStorage.removeItem('Istiyak AI_settings');
+      window.localStorage.removeItem('Istiyak AI_active_chat');
+
+      alert('Database and local cache cleared successfully. The app will reload now.');
+      window.location.reload();
+    } catch (error) {
+      console.error('Error clearing data:', error);
+      alert('Failed to clear data. Check that the backend server is running.');
     }
   };
 
@@ -459,12 +484,20 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ onClose }) => {
               <div className="space-y-6">
                 <div className="flex items-center justify-between mb-2">
                   <h3 className="text-lg font-medium text-slate-200">MongoDB Controls</h3>
-                  <button 
-                    onClick={fetchDbData}
-                    className="text-indigo-400 hover:text-indigo-300 text-sm flex items-center gap-1 transition-colors bg-slate-800 px-3 py-1.5 rounded-md border border-slate-700"
-                  >
-                    <Database size={14} /> Refresh DB Data
-                  </button>
+                  <div className="flex gap-2">
+                    <button 
+                      onClick={fetchDbData}
+                      className="text-indigo-400 hover:text-indigo-300 text-sm flex items-center gap-1 transition-colors bg-slate-800 px-3 py-1.5 rounded-md border border-slate-700"
+                    >
+                      <Database size={14} /> Refresh DB Data
+                    </button>
+                    <button
+                      onClick={clearAllData}
+                      className="text-red-300 hover:text-red-200 text-sm flex items-center gap-1 transition-colors bg-red-500/10 px-3 py-1.5 rounded-md border border-red-500/30"
+                    >
+                      <Trash2 size={14} /> Clear All
+                    </button>
+                  </div>
                 </div>
 
                 {/* Form to Update DB */}

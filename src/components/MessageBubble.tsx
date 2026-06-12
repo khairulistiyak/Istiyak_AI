@@ -35,6 +35,7 @@ export const MessageBubble: React.FC<MessageBubbleProps> = ({ message }) => {
         <ReactMarkdown
           remarkPlugins={[remarkGfm]}
           components={{
+            // eslint-disable-next-line @typescript-eslint/no-unused-vars, @typescript-eslint/no-explicit-any
             code({ node, inline, className, children, ...props }: any) {
               const match = /language-(\w+)/.exec(className || "");
               const language = match ? match[1] : "";
@@ -85,6 +86,7 @@ const CodeBlock = ({ language, code }: { language: string; code: string }) => {
       </div>
       <div className="p-3 overflow-x-auto text-[13px]">
         <SyntaxHighlighter
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
           style={vscDarkPlus as any}
           language={language}
           PreTag="div"

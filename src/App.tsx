@@ -1,8 +1,10 @@
 import { useState } from 'react';
+import { Routes, Route } from 'react-router-dom';
 import { AppProvider } from './context/AppContext';
 import { Sidebar } from './components/Sidebar';
 import { ChatWindow } from './components/ChatWindow';
 import { SettingsModal } from './components/SettingsModal';
+import { AdminDashboard } from './components/AdminDashboard';
 
 const AppContent = () => {
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
@@ -32,7 +34,10 @@ const AppContent = () => {
 function App() {
   return (
     <AppProvider>
-      <AppContent />
+      <Routes>
+        <Route path="/" element={<AppContent />} />
+        <Route path="/admin" element={<AdminDashboard />} />
+      </Routes>
     </AppProvider>
   );
 }

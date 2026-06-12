@@ -1,7 +1,7 @@
 import React, { createContext, useContext, useEffect } from "react";
 import type { ReactNode } from "react";
 import { useLocalStorage } from "../hooks/useLocalStorage";
-import type { Chat, Settings, Provider, Model } from "../types";
+import type { Chat, Settings } from "../types";
 import { generateId } from "../utils/generateId";
 
 interface AppContextType {
@@ -27,6 +27,54 @@ const defaultSettings: Settings = {
   globalSystemPrompt: "You are a helpful AI assistant.",
 };
 
+const createLegacyFallbackSettings = (dbData: {
+  providers?: Settings["providers"];
+  models?: Settings["models"];
+  routingRules?: Settings["routingRules"];
+  autoRouteEnabled?: boolean;
+  globalSystemPrompt?: string;
+  active_api_key?: string;
+  model_name?: string;
+}) => {
+  const hasProviders = Array.isArray(dbData.providers) && dbData.providers.length > 0;
+  const hasModels = Array.isArray(dbData.models) && dbData.models.length > 0;
+
+  if (hasProviders || hasModels) {
+    return {
+      providers: dbData.providers || [],
+      models: dbData.models || [],
+    };
+  }
+
+  if (!dbData.active_api_key || !dbData.model_name) {
+    return {
+      providers: [],
+      models: [],
+    };
+  }
+
+  const providerId = "legacy-db-provider";
+  const modelId = "legacy-db-model";
+
+  return {
+    providers: [
+      {
+        id: providerId,
+        name: "Legacy DB Provider",
+        baseUrl: "https://api.openai.com/v1",
+        apiKey: dbData.active_api_key,
+      },
+    ],
+    models: [
+      {
+        id: modelId,
+        name: dbData.model_name,
+        providerId,
+      },
+    ],
+  };
+};
+
 export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
   const [chats, setChats] = useLocalStorage<Chat[]>("Istiyak AI_chats", []);
   const [settings, setSettings] = useLocalStorage<Settings>("Istiyak AI_settings", defaultSettings);
@@ -34,32 +82,23 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
 
   // Sync with Database on mount
   useEffect(() => {
+    let isMounted = true;
+
     const fetchDbSettings = async () => {
       try {
         const res = await fetch("/api/settings");
         if (res.ok) {
           const dbData = await res.json();
-          if (dbData && dbData.active_api_key && dbData.model_name) {
-            setSettings(prev => {
-              let updatedProviders = [...prev.providers];
-              let updatedModels = [...prev.models];
-
-              if (updatedProviders.length === 0) {
-                const newProvider: Provider = { id: generateId(), name: "Default Provider", baseUrl: "https://openrouter.ai/api/v1", apiKey: dbData.active_api_key };
-                updatedProviders.push(newProvider);
-              } else {
-                updatedProviders[0] = { ...updatedProviders[0], apiKey: dbData.active_api_key };
-              }
-
-              if (updatedModels.length === 0) {
-                const newModel: Model = { id: generateId(), name: dbData.model_name, providerId: updatedProviders[0].id };
-                updatedModels.push(newModel);
-              } else {
-                updatedModels[0] = { ...updatedModels[0], name: dbData.model_name };
-              }
-
-              return { ...prev, providers: updatedProviders, models: updatedModels };
-            });
+          if (dbData && isMounted) {
+            const legacyFallback = createLegacyFallbackSettings(dbData);
+            setSettings((currentSettings) => ({
+              ...currentSettings,
+              providers: legacyFallback.providers.length > 0 ? legacyFallback.providers : currentSettings.providers,
+              models: legacyFallback.models.length > 0 ? legacyFallback.models : currentSettings.models,
+              routingRules: dbData.routingRules || currentSettings.routingRules,
+              autoRouteEnabled: dbData.autoRouteEnabled ?? currentSettings.autoRouteEnabled,
+              globalSystemPrompt: dbData.globalSystemPrompt || currentSettings.globalSystemPrompt,
+            }));
           }
         }
       } catch (error) {
@@ -68,11 +107,15 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     };
 
     fetchDbSettings();
+    return () => {
+      isMounted = false;
+    };
   }, [setSettings]);
 
   return <AppContext.Provider value={{ chats, setChats, settings, setSettings, activeChatId, setActiveChatId }}>{children}</AppContext.Provider>;
 };
 
+// eslint-disable-next-line react-refresh/only-export-components
 export const useAppContext = () => {
   const context = useContext(AppContext);
   if (!context) {

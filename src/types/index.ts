@@ -42,3 +42,11 @@ export interface Settings {
   autoRouteEnabled: boolean;
   globalSystemPrompt: string;
 }
+
+export interface Journal {
+  _id: string;
+  content: string;
+  tags: string[];
+  isActive: boolean;
+  createdAt: string;
+}
