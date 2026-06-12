@@ -2,7 +2,6 @@ import React, { createContext, useContext, useEffect } from "react";
 import type { ReactNode } from "react";
 import { useLocalStorage } from "../hooks/useLocalStorage";
 import type { Chat, Settings } from "../types";
-import { generateId } from "../utils/generateId";
 
 interface AppContextType {
   chats: Chat[];
