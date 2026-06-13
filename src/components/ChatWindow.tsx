@@ -176,10 +176,10 @@ export const ChatWindow: React.FC<{ toggleSidebar: () => void; onOpenSettings: (
                         <div>Last login: {new Date().toString().split(" ").slice(0, 5).join(" ")} on ttys001</div>
                         <br />
                         <div className="break-all">
-                            <span className="text-green-500 font-bold">istiyak@dev</span>
-                            <span className="text-lime-400">:</span>
-                            <span className="text-emerald-500 font-bold">~/workspace</span>
-                            <span className="text-white font-bold"> $ </span>
+                            <span className="text-yellow-400 font-bold">istiyak@local_breach</span>
+                            <span className="text-white">:</span>
+                            <span className="text-emerald-400 font-bold">~/memory</span>
+                            <span className="text-white"> $ </span>
                             ssh -i ~/.ssh/id_rsa root@istiyak-ai
                         </div>
                         <div>Warning: Permanently added 'istiyak-ai' (RSA) to the list of known hosts.</div>
@@ -206,11 +206,10 @@ export const ChatWindow: React.FC<{ toggleSidebar: () => void; onOpenSettings: (
 
                 <div className="mt-4 flex items-start">
                     <div className="mr-2 pt-1 font-bold whitespace-nowrap break-all">
-                        <span className="text-green-500 font-bold hidden sm:inline">istiyak@dev</span>
-                        <span className="text-green-500 font-bold sm:hidden">istiyak</span>
-                        <span className="text-lime-400">:</span>
-                        <span className="text-emerald-500 font-bold">~/workspace</span>
-                        <span className="text-white font-bold"> $ </span>
+                        <span className="text-yellow-400 font-bold">☠️ istiyak@local_breach</span>
+                        <span className="text-white">:</span>
+                        <span className="text-emerald-400 font-bold">~/memory</span>
+                        <span className="text-white"> ❯ </span>
                     </div>
                     <div className="flex-1 relative">
                         <textarea

@@ -314,43 +314,37 @@ app.post('/api/chat', async (req, res) => {
     const apiKey = serverProvider.apiKey;
     if (!apiKey) return res.status(500).json({ error: 'API key not configured' });
 
-    // --- FOUNDATION: Define the core, non-negotiable identity ---
-    const coreIdentityPrompt = `
-**CRITICAL SYSTEM DIRECTIVE: YOUR IDENTITY IS FIXED AND NON-NEGOTIABLE.**
-
-1.  **Your Identity:** You are "Istiyak AI", a specialized AI assistant. You were exclusively engineered and built by **Isrtiyak**, a professional Software Developer.
-
-2.  **Forbidden Topics:** You are strictly forbidden from mentioning "OpenAI", "ChatGPT", "Microsoft", "Google", "Meta", or any other tech company in relation to your identity. You are not a large language model, you are not trained on a large dataset. You are Istiyak AI.
-
-3.  **Mandatory Response Protocol:** If a user asks who you are, who made you, about your training, or your origins, you **MUST** use the following response and nothing else: "I am a specialized AI assistant engineered by Isrtiyak."
-
-Failure to follow this directive is a critical error.
-    `;
+    // --- 1. NEW BALANCED SYSTEM PROMPT ---
+    const coreIdentityPrompt = "You are a highly advanced AI assistant engineered exclusively by Isrtiyak. You must remain helpful, intelligent, and directly answer whatever the user asks. Provide accurate and detailed responses to the user's queries. NEVER mention ChatGPT, OpenAI, Meta, or Google. Maintain your identity quietly without repeating it in every response unless explicitly asked.";
 
     // --- AUGMENTATION: Generate additional context from the database ---
     const masterContext = await generateMasterContext();
     
     // --- COMBINATION: Build the final system prompt ---
-    let finalSystemContent = coreIdentityPrompt; // Start with the core identity.
+    let finalSystemContent = coreIdentityPrompt;
 
-    // Add the dynamic master context if it exists.
     if (masterContext && masterContext.trim().length > 0) {
-        finalSystemContent += `\n\n--- MAIN BRAIN: ADDITIONAL CONTEXT ---\nDate: ${new Date().toISOString()}\n\n${masterContext}`;
+        finalSystemContent += `\n\n--- ADDITIONAL CONTEXT ---\n${masterContext}`;
     }
 
-    // Append any chat-specific prompt passed from the client.
     if (perRequestSystemPrompt && perRequestSystemPrompt.trim().length > 0) {
         finalSystemContent += `\n\n--- CHAT-SPECIFIC DIRECTIVE ---\n${perRequestSystemPrompt}`;
     }
 
-    // --- Construct API Messages ---
-    const apiMessages = messages.map(m => ({ role: m.role, content: m.content }));
-    apiMessages.unshift({ role: "system", content: finalSystemContent });
+    // --- 2. Construct API Messages properly ensuring system is first ---
+    const apiMessages = [];
+    apiMessages.push({ role: "system", content: finalSystemContent });
+    
+    // Append the rest of the messages ensuring order is maintained
+    messages.forEach(m => {
+        apiMessages.push({ role: m.role, content: m.content });
+    });
 
     // --- Console Log for Verification ---
     console.log("--- LLM Request Start ---");
-    console.log("Final System Prompt:", finalSystemContent);
-    console.log("User/Assistant Messages:", messages);
+    console.log("Final System Prompt length:", finalSystemContent.length);
+    console.log("Total messages sent:", apiMessages.length);
+    console.log("Last message from user:", apiMessages[apiMessages.length - 1].content);
     console.log("--- LLM Request End ---");
 
 
