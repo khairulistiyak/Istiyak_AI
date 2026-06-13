@@ -9,3 +9,16 @@
     @apply bg-slate-900 text-slate-100 antialiased;
   }
 }
+
+/* Blinking Cursor Animation */
+@keyframes blink {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0; }
+}
+
+.blinking-cursor::after {
+  content: '█';
+  animation: blink 1.2s infinite;
+  display: inline-block;
+  margin-left: 4px;
+}

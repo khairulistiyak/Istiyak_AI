@@ -11,10 +11,12 @@ interface MessageBubbleProps {
 
 export const MessageBubble: React.FC<MessageBubbleProps> = ({ message }) => {
     const isUser = message.role === "user";
+    const timestamp = new Date(message.timestamp).toLocaleTimeString('en-US', { hour12: false });
 
     return (
         <div className="py-2 text-slate-300 font-mono text-[13px]">
-            <div className="mb-1">
+            <div className="mb-1 flex items-center flex-wrap">
+                <span className="text-slate-500 mr-2">[{timestamp}]</span>
                 {isUser ? (
                     <>
                         {/* User Prefix (Hacker Style) */}

@@ -47,19 +47,14 @@ export const ChatWindow: React.FC<{ toggleSidebar: () => void; onOpenSettings: (
             timestamp: ts,
         };
 
-        // --- AUTO SESSION CREATION LOGIC ---
         let currentChatId = activeChatId;
         let newMessages;
         let isFirstMessage = false;
 
         if (!currentChatId) {
-            // Create a new session automatically
             currentChatId = generateId();
             isFirstMessage = true;
-
-            // Temporary fallback title based on first message
             const fallbackTitle = command.split(' ').slice(0, 5).join(' ') + (command.split(' ').length > 5 ? '...' : '');
-
             const newSession = {
                 id: currentChatId,
                 title: fallbackTitle,
@@ -67,32 +62,21 @@ export const ChatWindow: React.FC<{ toggleSidebar: () => void; onOpenSettings: (
                 createdAt: ts,
                 updatedAt: ts,
             };
-
-            // Save metadata to DB
             try {
                 await fetch('/api/chats/metadata', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({
-                        id: currentChatId,
-                        title: fallbackTitle,
-                        createdAt: ts,
-                        updatedAt: ts
-                    })
+                    body: JSON.stringify({ id: currentChatId, title: fallbackTitle, createdAt: ts, updatedAt: ts })
                 });
             } catch (err) {
                 console.error("Failed to save initial chat metadata:", err);
             }
-
             setChats((prev) => [newSession, ...prev]);
             setActiveChatId(currentChatId);
             newMessages = [userMessage];
         } else {
-            // Append to existing session
             newMessages = [...(activeChat?.messages || []), userMessage];
             setChats((prev) => prev.map((c) => (c.id === currentChatId ? { ...c, messages: newMessages, updatedAt: ts } : c)));
-
-            // Update DB timestamp
             try {
                 await fetch(`/api/chats/metadata/${currentChatId}`, {
                     method: 'PUT',
@@ -103,55 +87,37 @@ export const ChatWindow: React.FC<{ toggleSidebar: () => void; onOpenSettings: (
                 console.error("Failed to update chat metadata:", err);
             }
         }
-        // --- END AUTO SESSION CREATION LOGIC ---
 
         setIsStreaming(true);
         setInput("");
 
-        // --- AI TITLE GENERATION (Background/Non-blocking) ---
         if (isFirstMessage) {
-            // Optimistic UI update already happened above with the fallback title.
-            // Now trigger the background API call.
             fetch('/api/chats/generate-title', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ chatId: currentChatId, userMessage: command })
             })
-                .then(res => res.json())
-                .then(data => {
-                    if (data.title && currentChatId) {
-                        // Update context state which updates the UI
-                        updateChatTitle(currentChatId, data.title);
-                    }
-                })
-                .catch(err => console.error("Background title generation failed:", err));
+            .then(res => res.json())
+            .then(data => {
+                if (data.title && currentChatId) {
+                    updateChatTitle(currentChatId, data.title);
+                }
+            })
+            .catch(err => console.error("Background title generation failed:", err));
         }
-        // --- END AI TITLE GENERATION ---
 
         try {
             const route = aiService.autoRoute(userMessage.content, settings);
-
-            if (!route) {
-                throw new Error("No valid model or provider configured. Please check your settings.");
-            }
+            if (!route) throw new Error("No valid model or provider configured. Please check your settings.");
 
             const assistantMessageId = generateId();
-
             setChats((prev) =>
                 prev.map((c) =>
-                    c.id === currentChatId
-                        ? {
-                            ...c,
-                            messages: [...c.messages, { id: assistantMessageId, role: "assistant", content: "", timestamp: Date.now() }],
-                        }
-                        : c,
-                ),
+                    c.id === currentChatId ? { ...c, messages: [...c.messages, { id: assistantMessageId, role: "assistant", content: "", timestamp: Date.now() }] } : c
+                )
             );
 
-            // We only pass the chat-specific system prompt here if one exists.
-            // The heavy lifting of the Main Brain is now done on the backend.
             const chatSpecificSystemPrompt = activeChat?.systemPrompt;
-
             const stream = aiService.streamChat(newMessages, route, chatSpecificSystemPrompt);
 
             let fullContent = "";
@@ -159,30 +125,18 @@ export const ChatWindow: React.FC<{ toggleSidebar: () => void; onOpenSettings: (
                 fullContent += chunk;
                 setChats((prev) =>
                     prev.map((c) =>
-                        c.id === currentChatId
-                            ? {
-                                ...c,
-                                messages: c.messages.map((m) => (m.id === assistantMessageId ? { ...m, content: fullContent } : m)),
-                            }
-                            : c,
-                    ),
+                        c.id === currentChatId ? { ...c, messages: c.messages.map((m) => (m.id === assistantMessageId ? { ...m, content: fullContent } : m)) } : c
+                    )
                 );
             }
         } catch (error) {
             console.error(error);
             const errorObj = error as Error;
-            const errorMessageContent = `**Error:** ${errorObj.message || 'An unknown error occurred.'}`;
-            setError(errorMessageContent);
-
+            setError(`**Error:** ${errorObj.message || 'An unknown error occurred.'}`);
             setChats((prev) =>
                 prev.map((c) =>
-                    c.id === currentChatId
-                        ? {
-                            ...c,
-                            messages: c.messages.slice(0, c.messages.length - 2),
-                        }
-                        : c,
-                ),
+                    c.id === currentChatId ? { ...c, messages: c.messages.slice(0, c.messages.length - 2) } : c
+                )
             );
         } finally {
             setIsStreaming(false);
@@ -206,7 +160,7 @@ export const ChatWindow: React.FC<{ toggleSidebar: () => void; onOpenSettings: (
                 </div>
                 <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
                     <div className="font-sans font-medium text-xs text-slate-400 flex items-center gap-2 truncate px-16">
-                        <span>khairulistiyak — -zsh</span>
+                        <span>Istiyak — -zsh</span>
                     </div>
                 </div>
                 <div className="absolute right-3">
@@ -250,7 +204,6 @@ export const ChatWindow: React.FC<{ toggleSidebar: () => void; onOpenSettings: (
                     </div>
                 )}
 
-                {/* Terminal Input Line - Matrix Hacker Mode */}
                 <div className="mt-4 flex items-start">
                     <div className="mr-2 pt-1 font-bold whitespace-nowrap break-all">
                         <span className="text-green-500 font-bold hidden sm:inline">istiyak@dev</span>
@@ -259,17 +212,20 @@ export const ChatWindow: React.FC<{ toggleSidebar: () => void; onOpenSettings: (
                         <span className="text-emerald-500 font-bold">~/workspace</span>
                         <span className="text-white font-bold"> $ </span>
                     </div>
-                    <textarea
-                        ref={textareaRef}
-                        value={input}
-                        onChange={(e) => setInput(e.target.value)}
-                        onKeyDown={handleKeyDown}
-                        className="flex-1 bg-transparent text-slate-300 font-mono resize-none focus:outline-none pt-1"
-                        rows={1}
-                        autoFocus
-                        disabled={isStreaming}
-                        placeholder={isStreaming ? "Waiting for response..." : "Type a command..."}
-                    />
+                    <div className="flex-1 relative">
+                        <textarea
+                            ref={textareaRef}
+                            value={input}
+                            onChange={(e) => setInput(e.target.value)}
+                            onKeyDown={handleKeyDown}
+                            className="w-full bg-transparent text-slate-300 font-mono resize-none focus:outline-none pt-1 pr-5"
+                            rows={1}
+                            autoFocus
+                            disabled={isStreaming}
+                            placeholder={isStreaming ? "Waiting for response..." : "Type a command..."}
+                        />
+                        {!isStreaming && <span className="absolute top-1 right-0 blinking-cursor text-slate-300"></span>}
+                    </div>
                 </div>
             </div>
         </main>
