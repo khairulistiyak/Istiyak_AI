@@ -108,9 +108,6 @@ export const Sidebar: React.FC<SidebarProps> = ({ isOpen, onClose }) => {
         <div className="mb-2 text-slate-400 hidden sm:block">total {chats.length}</div>
         
         {chats.map(chat => {
-          // Dynamic variables logic
-          const size = Math.max(chat.messages.length * 408, 408);
-          const date = new Date(chat.updatedAt).toLocaleString('en-US', { month: 'short', day: 'numeric' });
           const filename = formatFilename(chat.title);
 
           return (
@@ -139,9 +136,7 @@ export const Sidebar: React.FC<SidebarProps> = ({ isOpen, onClose }) => {
                 <div className="flex items-center justify-between w-full">
                   <div className="flex items-center whitespace-nowrap overflow-hidden gap-1 sm:gap-2">
                     <span className="text-red-400 font-semibold mr-1 hidden sm:inline">#root</span>
-                    {/*<span className="text-slate-400 w-10 text-right mr-2 hidden sm:inline">{size}</span>*/}
-                    {/*<span className="text-slate-500 mr-2 hidden sm:inline">{date}</span>*/}
-                    <span className={`truncate max-w-[150px] sm:57max-w-[160px] ${activeChatId === chat.id ? 'text-blue-300 font-bold' : 'text-green-500/80'}`}>
+                    <span className={`truncate max-w-[150px] sm:max-w-[200px] ${activeChatId === chat.id ? 'text-blue-300 font-bold' : 'text-green-500/80'}`}>
                       {filename}
                     </span>
                   </div>

@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useEffect, useCallback, useRef } from "react";
+import React, { createContext, useContext, useEffect, useCallback } from "react";
 import type { ReactNode } from "react";
 import { useLocalStorage } from "../hooks/useLocalStorage";
 import type { Chat, Settings } from "../types";
@@ -33,9 +33,6 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
   const [settings, setSettings] = useLocalStorage<Settings>("Istiyak AI_settings", defaultSettings);
   const [activeChatId, setActiveChatId] = useLocalStorage<string | null>("Istiyak AI_active_chat", null);
   
-  // Ref to track which chats have already had titles generated to prevent duplicate API calls
-  const titleGenerationAttemptedRef = useRef<Set<string>>(new Set());
-
   const fetchSettings = useCallback(async () => {
     try {
       const res = await fetch("/api/settings");
@@ -56,20 +53,16 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     }
   }, [setSettings]);
 
-  // Fetch settings when the app first loads
   useEffect(() => {
     void fetchSettings();
   }, [fetchSettings]);
 
-  // Helper to optimistically update a chat's title in the UI
   const updateChatTitle = useCallback((chatId: string, title: string) => {
     setChats(prevChats => 
       prevChats.map(c => c.id === chatId ? { ...c, title } : c)
     );
   }, [setChats]);
 
-  // Sync chats metadata with DB (e.g., when a chat is created or deleted)
-  // And fetch titles from DB if they were generated on another device
   useEffect(() => {
     const syncChats = async () => {
       try {
@@ -84,7 +77,6 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
             dbChatsMetadata.forEach((dbMeta: any) => {
               const localChatIndex = updatedChats.findIndex(c => c.id === dbMeta._id);
               if (localChatIndex !== -1) {
-                // Update local title if DB has a generated title and local doesn't match
                 if (dbMeta.isTitleGenerated && updatedChats[localChatIndex].title !== dbMeta.title) {
                   updatedChats[localChatIndex].title = dbMeta.title;
                   hasChanges = true;
@@ -100,8 +92,6 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
       }
     };
     
-    // Sync initially and then every minute or so could be added, 
-    // but doing it once on mount is okay for now as local state is the primary driver
     syncChats();
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
@@ -113,7 +103,6 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
   );
 };
 
-// eslint-disable-next-line react-refresh/only-export-components
 export const useAppContext = () => {
   const context = useContext(AppContext);
   if (!context) {

@@ -3,6 +3,7 @@ import { useAppContext } from "../context/AppContext";
 import { MessageBubble } from "./MessageBubble";
 import { aiService } from "../services/aiService";
 import { generateId } from "../utils/generateId";
+import type { Message } from "../types"; // Import Message type
 
 export const ChatWindow: React.FC<{ toggleSidebar: () => void; onOpenSettings: () => void }> = ({ toggleSidebar, onOpenSettings }) => {
     const { chats, setChats, activeChatId, setActiveChatId, settings, updateChatTitle } = useAppContext();
@@ -40,7 +41,7 @@ export const ChatWindow: React.FC<{ toggleSidebar: () => void; onOpenSettings: (
         }
 
         const ts = Date.now();
-        const userMessage = {
+        const userMessage: Message = {
             id: generateId(),
             role: "user" as const,
             content: command,
@@ -48,7 +49,7 @@ export const ChatWindow: React.FC<{ toggleSidebar: () => void; onOpenSettings: (
         };
 
         let currentChatId = activeChatId;
-        let newMessages;
+        let newMessages: Message[]; // Explicitly type newMessages
         let isFirstMessage = false;
 
         if (!currentChatId) {
