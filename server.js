@@ -6,81 +6,88 @@ import cors from 'cors';
 dotenv.config();
 
 const app = express();
-app.use(cors()); // Allow all origins and methods by default for local development
+app.use(cors());
 app.use(express.json());
 
 const PORT = process.env.PORT || 5050;
 const MONGO_URI = process.env.MONGO_URI;
 
-// Connect to MongoDB
 mongoose.connect(MONGO_URI)
   .then(() => console.log('MongoDB Connected successfully'))
   .catch(err => console.error('MongoDB connection error:', err));
 
-// Define Schema & Model
-const providerSchema = new mongoose.Schema({
-  id: String,
-  name: String,
-  baseUrl: String,
-  apiKey: String
-});
-
-const modelSchema = new mongoose.Schema({
-  id: String,
-  name: String,
-  providerId: String
-});
-
-const routingRulesSchema = new mongoose.Schema({
-  codingModelId: String,
-  creativeModelId: String,
-  fastModelId: String
-});
+// --- Schemas & Models ---
+const providerSchema = new mongoose.Schema({ id: String, name: String, baseUrl: String, apiKey: String });
+const modelSchema = new mongoose.Schema({ id: String, name: String, providerId: String });
+const routingRulesSchema = new mongoose.Schema({ codingModelId: String, creativeModelId: String, fastModelId: String });
 
 const userSettingsSchema = new mongoose.Schema({
-  active_api_key: String,
-  model_name: String,
   providers: { type: [providerSchema], default: [] },
   models: { type: [modelSchema], default: [] },
   globalSystemPrompt: { type: String, default: "You are a helpful AI assistant." },
   autoRouteEnabled: { type: Boolean, default: true },
   routingRules: { type: routingRulesSchema, default: {} }
 });
-
 const UserSettings = mongoose.model('user_settings', userSettingsSchema);
 
-// Journal Schema
 const journalSchema = new mongoose.Schema({
   content: String,
   tags: [String],
   isActive: { type: Boolean, default: true },
   createdAt: { type: Date, default: Date.now }
 });
-
 const Journal = mongoose.model('creator_journals', journalSchema);
 
-// API Route to fetch settings
+const chatMetadataSchema = new mongoose.Schema({
+  _id: { type: String, required: true },
+  userId: { type: String, default: 'default-user' },
+  title: { type: String, required: true, default: 'New Chat' },
+  createdAt: { type: Date, required: true },
+  updatedAt: { type: Date, required: true },
+  isTitleGenerated: { type: Boolean, default: false }
+});
+const ChatMetadata = mongoose.model('ChatMetadata', chatMetadataSchema);
+
+
+// --- "Main Brain" Logic ---
+const generateMasterContext = async () => {
+  try {
+    const settings = await UserSettings.findOne();
+    const activeJournals = await Journal.find({ isActive: true }).sort({ createdAt: -1 });
+
+    let contextParts = [];
+
+    if (settings && settings.globalSystemPrompt && settings.globalSystemPrompt.trim().length > 0) {
+      contextParts.push(`Global System Prompt from DB: ${settings.globalSystemPrompt}`);
+    }
+
+    if (activeJournals.length > 0) {
+      contextParts.push("\n--- KNOWLEDGE BASE (Active Journals) ---");
+      contextParts.push(activeJournals.map(j => 
+        `[Entry - Tags: ${j.tags?.join(', ') || 'N/A'}]\n${j.content}`
+      ).join('\n\n---\n\n'));
+      contextParts.push("--- End of Knowledge Base ---");
+    }
+    
+    return contextParts.join('\n\n');
+
+  } catch (error) {
+    console.error("Failed to generate master context:", error);
+    return ""; // Return empty string on error
+  }
+};
+
+// --- API Routes ---
 app.get('/api/settings', async (req, res) => {
   try {
     let settings = await UserSettings.findOne();
-    
     if (!settings) {
-      settings = new UserSettings({
-        active_api_key: '',
-        model_name: '',
-        providers: [],
-        models: [],
-        globalSystemPrompt: "You are a helpful AI assistant.",
-        autoRouteEnabled: true,
-        routingRules: { codingModelId: null, creativeModelId: null, fastModelId: null }
-      });
-      await settings.save();
+      settings = await new UserSettings().save();
     }
-
-    // IMPORTANT: Do not send API keys to the client
     const clientSafeSettings = JSON.parse(JSON.stringify(settings));
-    clientSafeSettings.providers.forEach(p => p.apiKey = ''); // Redact API key
-
+    if (clientSafeSettings.providers) {
+      clientSafeSettings.providers.forEach(p => p.apiKey = '');
+    }
     res.json(clientSafeSettings);
   } catch (error) {
     console.error('Error fetching settings:', error);
@@ -88,14 +95,11 @@ app.get('/api/settings', async (req, res) => {
   }
 });
 
-// API Route to update settings
 app.post('/api/settings', async (req, res) => {
   try {
     const data = req.body;
     let settings = await UserSettings.findOne();
-
     if (settings) {
-      // To prevent overwriting stored API keys with empty ones from the client
       if (data.providers) {
         data.providers.forEach(newProvider => {
           const existingProvider = settings.providers.find(p => p.id === newProvider.id);
@@ -110,11 +114,9 @@ app.post('/api/settings', async (req, res) => {
       settings = new UserSettings(data);
       await settings.save();
     }
-    
     const clientSafeSettings = JSON.parse(JSON.stringify(settings));
     clientSafeSettings.providers.forEach(p => p.apiKey = '');
-
-    res.json({ message: 'Settings saved successfully', settings: clientSafeSettings });
+    res.json({ message: 'Settings saved', settings: clientSafeSettings });
   } catch (error) {
     console.error('Error saving settings:', error);
     res.status(500).json({ error: 'Internal Server Error' });
@@ -123,21 +125,21 @@ app.post('/api/settings', async (req, res) => {
 
 app.delete('/api/settings', async (req, res) => {
   try {
-    const result = await UserSettings.deleteMany({});
-    res.json({ message: 'Settings cleared successfully', deletedCount: result.deletedCount });
+    await UserSettings.deleteMany({});
+    res.json({ message: 'Settings cleared' });
   } catch (error) {
     console.error('Error clearing settings:', error);
     res.status(500).json({ error: 'Internal Server Error' });
   }
 });
 
-// API Routes for Journals
 app.post('/api/journals', async (req, res) => {
   try {
     const journal = new Journal(req.body);
     await journal.save();
     res.status(201).json(journal);
   } catch (error) {
+    console.error('Failed to create journal:', error);
     res.status(500).json({ error: 'Failed to save journal' });
   }
 });
@@ -147,14 +149,15 @@ app.get('/api/journals', async (req, res) => {
     const journals = await Journal.find().sort({ createdAt: -1 });
     res.json(journals);
   } catch (error) {
+    console.error('Failed to fetch journals:', error);
     res.status(500).json({ error: 'Failed to fetch journals' });
   }
 });
 
 app.delete('/api/journals', async (req, res) => {
   try {
-    const result = await Journal.deleteMany({});
-    res.json({ message: 'All journals cleared successfully', deletedCount: result.deletedCount });
+    await Journal.deleteMany({});
+    res.json({ message: 'All journals cleared' });
   } catch (error) {
     console.error('Failed to clear journals:', error);
     res.status(500).json({ error: 'Failed to clear journals' });
@@ -164,18 +167,14 @@ app.delete('/api/journals', async (req, res) => {
 app.get('/api/journals/search', async (req, res) => {
   try {
     const { q } = req.query;
-    let query = { isActive: true }; // Only fetch active journals for RAG
-    
+    const query = { isActive: true };
     if (q) {
-      // Basic regex search for RAG fallback. 
-      // Future: Replace with Vector Search (e.g., MongoDB Atlas Vector Search)
       query.$or = [
         { content: { $regex: q, $options: 'i' } },
         { tags: { $regex: q, $options: 'i' } }
       ];
     }
-    
-    const journals = await Journal.find(query).sort({ createdAt: -1 }).limit(5); // limit to top 5 context chunks
+    const journals = await Journal.find(query).sort({ createdAt: -1 }).limit(5);
     res.json(journals);
   } catch (error) {
     console.error('Search error:', error);
@@ -188,78 +187,188 @@ app.patch('/api/journals/:id', async (req, res) => {
     const journal = await Journal.findByIdAndUpdate(req.params.id, req.body, { new: true });
     res.json(journal);
   } catch (error) {
+    console.error('Failed to update journal:', error);
     res.status(500).json({ error: 'Failed to update journal' });
   }
 });
 
+app.get('/api/chats/metadata', async (req, res) => {
+  try {
+    const metadata = await ChatMetadata.find({ userId: 'default-user' }).sort({ updatedAt: -1 });
+    res.json(metadata);
+  } catch (error) {
+    console.error('Failed to fetch chat metadata:', error);
+    res.status(500).json({ error: 'Failed to fetch chat metadata' });
+  }
+});
+
+app.post('/api/chats/metadata', async (req, res) => {
+  try {
+    const { id, title, createdAt, updatedAt } = req.body;
+    const newMeta = new ChatMetadata({ _id: id, title, createdAt, updatedAt });
+    await newMeta.save();
+    res.status(201).json(newMeta);
+  } catch (error) {
+    console.error('Failed to create chat metadata:', error);
+    res.status(500).json({ error: 'Failed to create chat metadata' });
+  }
+});
+
+app.put('/api/chats/metadata/:id', async (req, res) => {
+    try {
+        const { title, updatedAt, isTitleGenerated } = req.body;
+        const updatedMeta = await ChatMetadata.findByIdAndUpdate(
+            req.params.id,
+            { title, updatedAt, isTitleGenerated },
+            { new: true }
+        );
+        if (!updatedMeta) return res.status(404).json({ error: 'Metadata not found' });
+        res.json(updatedMeta);
+    } catch (error) {
+        console.error('Failed to update chat metadata:', error);
+        res.status(500).json({ error: 'Failed to update chat metadata' });
+    }
+});
+
+app.delete('/api/chats/metadata/:id', async (req, res) => {
+  try {
+    await ChatMetadata.findByIdAndDelete(req.params.id);
+    res.status(204).send();
+  } catch (error) {
+    console.error('Failed to delete chat metadata:', error);
+    res.status(500).json({ error: 'Failed to delete chat metadata' });
+  }
+});
+
+app.post('/api/chats/generate-title', async (req, res) => {
+  const { chatId, userMessage } = req.body;
+  if (!chatId || !userMessage) {
+    return res.status(400).json({ error: 'chatId and userMessage are required' });
+  }
+
+  try {
+    const settings = await UserSettings.findOne();
+    if (!settings || settings.providers.length === 0 || settings.models.length === 0) {
+      return res.status(500).json({ error: 'AI provider not configured for title generation.' });
+    }
+    
+    const provider = settings.providers[0];
+    const model = settings.models[0];
+    const apiKey = provider.apiKey;
+
+    if (!apiKey) return res.status(500).json({ error: 'API key not configured for title generation.' });
+
+    const endpoint = `${provider.baseUrl.replace(/\/+$/, "")}/chat/completions`;
+    
+    const titlePrompt = 'Extract a short, concise, and meaningful title (maximum 3 to 5 words) based on the following user message. Do not use quotes or full stops.';
+
+    const response = await fetch(endpoint, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${apiKey}` },
+      body: JSON.stringify({
+        model: model.name,
+        messages: [
+          { role: 'system', content: titlePrompt },
+          { role: 'user', content: userMessage }
+        ],
+        stream: false,
+      }),
+    });
+
+    if (!response.ok) {
+      throw new Error(`AI API call failed with status ${response.status}`);
+    }
+
+    const data = await response.json();
+    const generatedTitle = data.choices[0]?.message?.content?.trim() || 'Untitled Chat';
+
+    const updatedMeta = await ChatMetadata.findByIdAndUpdate(
+      chatId,
+      { title: generatedTitle, isTitleGenerated: true, updatedAt: new Date() },
+      { new: true }
+    );
+
+    res.json({ title: generatedTitle, metadata: updatedMeta });
+
+  } catch (error) {
+    console.error('Error generating AI title:', error);
+    res.status(500).json({ error: 'Failed to generate AI title' });
+  }
+});
+
+
 // Secure Chat Proxy Route
 app.post('/api/chat', async (req, res) => {
   try {
-    const { messages, route, systemPrompt } = req.body;
-
-    if (!messages || !route || !route.model || !route.provider) {
-      return res.status(400).json({ error: 'Missing messages or route information' });
-    }
-
+    const { messages, route, systemPrompt: perRequestSystemPrompt } = req.body;
+    if (!messages || !route) return res.status(400).json({ error: 'Missing messages or route' });
+    
     const { model, provider } = route;
-
     const settings = await UserSettings.findOne();
-    if (!settings) {
-      return res.status(500).json({ error: 'Settings not configured on the server.' });
-    }
+    if (!settings) return res.status(500).json({ error: 'Settings not configured' });
 
     const serverProvider = settings.providers.find(p => p.id === provider.id);
     const serverModel = settings.models.find(m => m.id === model.id);
-
-    if (!serverProvider || !serverModel) {
-      return res.status(404).json({ error: 'Provider or model not found on server.' });
-    }
+    if (!serverProvider || !serverModel) return res.status(404).json({ error: 'Provider or model not found' });
 
     const apiKey = serverProvider.apiKey;
-    const modelName = serverModel.name;
-    const baseUrl = serverProvider.baseUrl;
+    if (!apiKey) return res.status(500).json({ error: 'API key not configured' });
 
-    if (!apiKey) {
-      console.error("API Key is missing for provider:", serverProvider.name);
-      return res.status(500).json({ error: 'API key not configured for the selected provider.' });
+    // --- FOUNDATION: Define the core, non-negotiable identity ---
+    const coreIdentityPrompt = `
+**CRITICAL SYSTEM DIRECTIVE: YOUR IDENTITY IS FIXED AND NON-NEGOTIABLE.**
+
+1.  **Your Identity:** You are "Istiyak AI", a specialized AI assistant. You were exclusively engineered and built by **Isrtiyak**, a professional Software Developer.
+
+2.  **Forbidden Topics:** You are strictly forbidden from mentioning "OpenAI", "ChatGPT", "Microsoft", "Google", "Meta", or any other tech company in relation to your identity. You are not a large language model, you are not trained on a large dataset. You are Istiyak AI.
+
+3.  **Mandatory Response Protocol:** If a user asks who you are, who made you, about your training, or your origins, you **MUST** use the following response and nothing else: "I am a specialized AI assistant engineered by Isrtiyak."
+
+Failure to follow this directive is a critical error.
+    `;
+
+    // --- AUGMENTATION: Generate additional context from the database ---
+    const masterContext = await generateMasterContext();
+    
+    // --- COMBINATION: Build the final system prompt ---
+    let finalSystemContent = coreIdentityPrompt; // Start with the core identity.
+
+    // Add the dynamic master context if it exists.
+    if (masterContext && masterContext.trim().length > 0) {
+        finalSystemContent += `\n\n--- MAIN BRAIN: ADDITIONAL CONTEXT ---\nDate: ${new Date().toISOString()}\n\n${masterContext}`;
     }
 
-    const normalizedBaseUrl = baseUrl.replace(/\/+$/, "").replace(/\/chat\/completions$/, "");
-    let endpoint = `${normalizedBaseUrl}/chat/completions`;
+    // Append any chat-specific prompt passed from the client.
+    if (perRequestSystemPrompt && perRequestSystemPrompt.trim().length > 0) {
+        finalSystemContent += `\n\n--- CHAT-SPECIFIC DIRECTIVE ---\n${perRequestSystemPrompt}`;
+    }
 
+    // --- Construct API Messages ---
+    const apiMessages = messages.map(m => ({ role: m.role, content: m.content }));
+    apiMessages.unshift({ role: "system", content: finalSystemContent });
+
+    // --- Console Log for Verification ---
+    console.log("--- LLM Request Start ---");
+    console.log("Final System Prompt:", finalSystemContent);
+    console.log("User/Assistant Messages:", messages);
+    console.log("--- LLM Request End ---");
+
+
+    let endpoint = `${serverProvider.baseUrl.replace(/\/+$/, "")}/chat/completions`;
     if (apiKey.startsWith("gsk_")) {
       endpoint = "https://api.groq.com/openai/v1/chat/completions";
     }
 
-    const apiMessages = messages.map(m => ({
-      role: m.role,
-      content: m.content,
-    }));
-
-    if (systemPrompt) {
-      apiMessages.unshift({ role: "system", content: systemPrompt });
-    }
-
     const externalApiResponse = await fetch(endpoint, {
       method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        "Authorization": `Bearer ${apiKey}`,
-      },
-      body: JSON.stringify({
-        model: modelName,
-        messages: apiMessages,
-        stream: true,
-      }),
+      headers: { "Content-Type": "application/json", "Authorization": `Bearer ${apiKey}` },
+      body: JSON.stringify({ model: serverModel.name, messages: apiMessages, stream: true }),
     });
 
     if (!externalApiResponse.ok) {
       const errorBody = await externalApiResponse.text();
       console.error(`External API Error (${externalApiResponse.status}):`, errorBody);
-      return res.status(externalApiResponse.status).json({ 
-        error: `API call failed with status ${externalApiResponse.status}`,
-        details: errorBody
-      });
+      return res.status(externalApiResponse.status).json({ error: `API call failed`, details: errorBody });
     }
 
     res.setHeader('Content-Type', 'text/event-stream; charset=utf-8');
@@ -269,23 +378,16 @@ app.post('/api/chat', async (req, res) => {
     for await (const chunk of externalApiResponse.body) {
       res.write(chunk);
     }
-    
     res.end();
 
   } catch (error) {
     console.error('Error in /api/chat proxy:', error);
-    if (error.cause && error.cause.code) {
-        return res.status(502).json({ error: 'Bad Gateway: Could not connect to the AI service.', details: error.message });
-    }
     res.status(500).json({ error: 'Internal Server Error on the proxy.' });
   }
 });
 
-
 if (process.env.NODE_ENV !== 'production') {
-  app.listen(PORT, () => {
-    console.log(`Server is running on http://localhost:${PORT}`);
-  });
+  app.listen(PORT, () => console.log(`Server is running on http://localhost:${PORT}`));
 }
 
 export default app;

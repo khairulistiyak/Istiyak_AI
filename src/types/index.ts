@@ -27,6 +27,7 @@ export interface Chat {
   createdAt: number;
   updatedAt: number;
   systemPrompt?: string;
+  isTitleGenerated?: boolean; // To track if AI title has been set
 }
 
 export interface RoutingRules {

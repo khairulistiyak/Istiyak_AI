@@ -62,7 +62,7 @@ export const Sidebar: React.FC<SidebarProps> = ({ isOpen, onClose }) => {
       <div className="p-4 border-b border-white/5">
         <div className="flex justify-between items-center mb-2">
           <span className="truncate">
-            <span className="text-emerald-400 font-bold hidden sm:inline">khairulistiyak@MacBook-Pro</span>
+            <span className="text-emerald-400 font-bold hidden sm:inline">i_@istiyak 1.1 Beta</span>
             <span className="text-white hidden sm:inline">:</span>
             <span className="text-blue-400 font-bold">~/sessions</span>
             <span className="text-white"> % </span>
@@ -80,13 +80,13 @@ export const Sidebar: React.FC<SidebarProps> = ({ isOpen, onClose }) => {
       </div>
 
       <div className="flex-1 overflow-y-auto p-2 sm:p-4 space-y-1 custom-scrollbar">
-        <div className="mb-2 text-slate-400 truncate hidden sm:block">
-          <span className="text-emerald-400 font-bold">khairulistiyak@MacBook-Pro</span>
-          <span className="text-white">:</span>
-          <span className="text-blue-400 font-bold">~/sessions</span>
-          <span className="text-white"> % </span>
-          ls -la
-        </div>
+        {/*<div className="mb-2 text-slate-400 truncate hidden sm:block">*/}
+        {/*  <span className="text-emerald-400 font-bold">i_@istiyak 1.1 Beta</span>*/}
+        {/*  <span className="text-white">:</span>*/}
+        {/*  <span className="text-blue-400 font-bold">~/sessions</span>*/}
+        {/*  <span className="text-white"> % </span>*/}
+        {/*  ls -la*/}
+        {/*</div>*/}
         <div className="mb-2 text-slate-400 hidden sm:block">total {chats.length * 8}</div>
         
         {chats.map(chat => {
@@ -105,7 +105,7 @@ export const Sidebar: React.FC<SidebarProps> = ({ isOpen, onClose }) => {
             >
               {editingId === chat.id ? (
                 <form onSubmit={(e) => saveEdit(e, chat.id)} className="flex items-center gap-2 w-full" onClick={e => e.stopPropagation()}>
-                  <span className="text-slate-500 hidden sm:inline">-rw-r--r--</span>
+                  <span className="text-slate-500 hidden sm:inline">-rw-</span>
                   <input
                     type="text"
                     value={editTitle}
@@ -119,7 +119,7 @@ export const Sidebar: React.FC<SidebarProps> = ({ isOpen, onClose }) => {
               ) : (
                 <div className="flex items-center justify-between w-full">
                   <div className="flex items-center whitespace-nowrap overflow-hidden gap-1 sm:gap-2">
-                    <span className="text-slate-500 hidden sm:inline">-rw-r--r--</span>
+                    <span className="text-slate-500 hidden sm:inline">-rw-</span>
                     <span className="text-emerald-400 hidden md:inline">khairul</span>
                     <span className="text-slate-500 hidden md:inline">staff</span>
                     <span className="text-slate-400 hidden sm:inline">{String(chat.messages.length * 102).padStart(4, ' ')}</span>
